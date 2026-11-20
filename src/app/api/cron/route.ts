@@ -2,10 +2,18 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getConfig, refineConfig } from '@/lib/config';
+import { API_CONFIG, getConfig, refineConfig } from '@/lib/config';
 import { db } from '@/lib/db';
 import { fetchVideoDetail } from '@/lib/fetchVideoDetail';
 import { refreshLiveChannels } from '@/lib/live';
+import {
+  applyHealthReport,
+  HealthFields,
+  HealthReport,
+  probeVideoSource,
+  shouldProbe,
+  shouldSuppressDisabling,
+} from '@/lib/source-health';
 import { SearchResult } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -15,6 +23,48 @@ export const runtime = 'nodejs';
 const MIN_INTERVAL_MS = 5 * 60 * 1000;
 let runningJob: Promise<void> | null = null;
 let lastRunAt = 0;
+
+// 健康检查并发与超时：视频源只发一次搜索请求，直播源要拉整个 m3u，分开配置
+const VIDEO_PROBE_CONCURRENCY = 6;
+const LIVE_PROBE_CONCURRENCY = 4;
+const LIVE_FETCH_TIMEOUT_MS = 15 * 1000;
+
+// 一轮健康检查里单个源的检测结果（视频源没有频道数，用 null 占位）
+interface HealthCheckResult {
+  source: HealthFields & { channelNumber?: number };
+  channelNumber: number | null;
+  report: HealthReport;
+}
+
+// 带并发上限地跑一组任务，结果顺序与入参一致
+async function runWithConcurrency<T>(
+  tasks: (() => Promise<T>)[],
+  concurrency: number
+): Promise<T[]> {
+  const results: T[] = [];
+  let index = 0;
+  const worker = async () => {
+    while (index < tasks.length) {
+      const i = index++;
+      results[i] = await tasks[i]();
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, tasks.length) }, () => worker())
+  );
+  return results;
+}
+
+function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  task: (item: T) => Promise<R>
+): Promise<R[]> {
+  return runWithConcurrency(
+    items.map((item) => () => task(item)),
+    concurrency
+  );
+}
 
 export async function GET(request: NextRequest) {
   console.log(request.url);
@@ -69,36 +119,101 @@ export async function GET(request: NextRequest) {
 
 async function cronJob() {
   await refreshConfig();
-  await refreshAllLiveChannels();
+  await refreshSourcesHealth();
   await refreshRecordAndFavorites();
 }
 
-async function refreshAllLiveChannels() {
+async function refreshSourcesHealth() {
   const config = await getConfig();
+  // 启用中的源 + 之前被自动停用的源都要探活，后者连续成功才能自动恢复
+  const videoSources = (config.SourceConfig || []).filter(shouldProbe);
+  const liveSources = (config.LiveConfig || []).filter(shouldProbe);
 
-  // 并发刷新所有启用的直播源
-  const refreshPromises = (config.LiveConfig || [])
-    .filter(liveInfo => !liveInfo.disabled)
-    .map(async (liveInfo) => {
-      try {
-        const nums = await refreshLiveChannels(liveInfo);
-        liveInfo.channelNumber = nums;
-      } catch (error) {
-        console.error(`刷新直播源失败 [${liveInfo.name || liveInfo.key}]:`, error);
-        liveInfo.channelNumber = 0;
+  if (videoSources.length === 0 && liveSources.length === 0) {
+    return;
+  }
+
+  const [videoResults, liveResults] = await Promise.all([
+    // 视频源按采集站搜索接口探活
+    mapWithConcurrency(
+      videoSources,
+      VIDEO_PROBE_CONCURRENCY,
+      async (source): Promise<HealthCheckResult> => ({
+        source,
+        channelNumber: null,
+        report: await probeVideoSource(source.api, {
+          headers: API_CONFIG.search.headers,
+        }),
+      })
+    ),
+    // 直播源按 m3u 拉取结果探活，顺带刷新频道数
+    mapWithConcurrency(
+      liveSources,
+      LIVE_PROBE_CONCURRENCY,
+      async (liveInfo): Promise<HealthCheckResult> => {
+        try {
+          const channelNumber = await refreshLiveChannels(liveInfo, {
+            timeoutMs: LIVE_FETCH_TIMEOUT_MS,
+          });
+          const report: HealthReport =
+            channelNumber > 0
+              ? { ok: true }
+              : { ok: false, error: '未解析到任何频道' };
+          return { source: liveInfo, channelNumber, report };
+        } catch (error) {
+          console.error(
+            `刷新直播源失败 [${liveInfo.name || liveInfo.key}]:`,
+            error
+          );
+          return {
+            source: liveInfo,
+            channelNumber: 0,
+            report: {
+              ok: false,
+              error: error instanceof Error ? error.message : '拉取 m3u 失败',
+            } as HealthReport,
+          };
+        }
       }
-    });
+    ),
+  ]);
 
-  // 等待所有刷新任务完成
-  await Promise.all(refreshPromises);
+  const results = [...videoResults, ...liveResults];
+  const failed = results.filter((result) => !result.report.ok).length;
 
-  // 保存配置
+  // 大面积同时失败多半是我方网络/DNS 问题，本轮一个源都不停，也不写频道数
+  if (shouldSuppressDisabling(failed, results.length)) {
+    console.warn(
+      `[健康检查] ${failed}/${results.length} 个源同时失败，疑似本地网络问题，本轮不停用任何源`
+    );
+    return;
+  }
+
+  results.forEach((result) => {
+    if (result.channelNumber !== null) {
+      result.source.channelNumber = result.channelNumber;
+    }
+    applyHealthReport(result.source, result.report);
+  });
+
   await db.saveAdminConfig(config);
+
+  const autoDisabled = results.filter(
+    (result) => result.source.disabled && result.source.disabledBy === 'auto'
+  ).length;
+  console.log(
+    `[健康检查] 完成：检测 ${results.length} 个源，失败 ${failed} 个，当前自动停用 ${autoDisabled} 个`
+  );
 }
 
 async function refreshConfig() {
   let config = await getConfig();
-  if (config && config.ConfigSubscribtion && config.ConfigSubscribtion.URL && config.ConfigSubscribtion.AutoUpdate) {
+  if (
+    config &&
+    config.ConfigSubscribtion &&
+    config.ConfigSubscribtion.URL &&
+    config.ConfigSubscribtion.AutoUpdate
+  ) {
     try {
       const response = await fetch(config.ConfigSubscribtion.URL);
 
@@ -171,23 +286,6 @@ async function refreshRecordAndFavorites() {
         detailCache.set(key, promise);
       }
       return promise;
-    };
-
-    // 并发限制工具
-    const runWithConcurrency = async <T>(
-      tasks: (() => Promise<T>)[],
-      concurrency: number
-    ): Promise<T[]> => {
-      const results: T[] = [];
-      let index = 0;
-      const worker = async () => {
-        while (index < tasks.length) {
-          const i = index++;
-          results[i] = await tasks[i]();
-        }
-      };
-      await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, () => worker()));
-      return results;
     };
 
     // 处理单个用户的播放记录和收藏

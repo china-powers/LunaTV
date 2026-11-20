@@ -48,26 +48,48 @@ export async function getCachedLiveChannels(key: string): Promise<LiveChannels |
   return cachedLiveChannels[key] || null;
 }
 
-export async function refreshLiveChannels(liveInfo: {
-  key: string;
-  name: string;
-  url: string;
-  ua?: string;
-  epg?: string;
-  from: 'config' | 'custom';
-  channelNumber?: number;
-  disabled?: boolean;
-}): Promise<number> {
+export async function refreshLiveChannels(
+  liveInfo: {
+    key: string;
+    name: string;
+    url: string;
+    ua?: string;
+    epg?: string;
+    from: 'config' | 'custom';
+    channelNumber?: number;
+    disabled?: boolean;
+  },
+  options: { timeoutMs?: number } = {}
+): Promise<number> {
   if (cachedLiveChannels[liveInfo.key]) {
     delete cachedLiveChannels[liveInfo.key];
   }
   const ua = liveInfo.ua || defaultUA;
-  const response = await fetch(liveInfo.url, {
-    headers: {
-      'User-Agent': ua,
-    },
-  });
-  const data = await response.text();
+  // 定时任务需要给 m3u 拉取设上限，否则一个卡死的源会拖住整轮检测
+  const controller = options.timeoutMs ? new AbortController() : undefined;
+  const timer = controller
+    ? setTimeout(() => controller.abort(), options.timeoutMs)
+    : undefined;
+
+  let data: string;
+  try {
+    const response = await fetch(liveInfo.url, {
+      headers: {
+        'User-Agent': ua,
+      },
+      signal: controller?.signal,
+    });
+    data = await response.text();
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`拉取 m3u 超时（${options.timeoutMs}ms）`);
+    }
+    throw error;
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
   const result = parseM3U(liveInfo.key, data);
   const epgUrl = liveInfo.epg || result.tvgUrl;
   const epgs = await parseEpg(epgUrl, liveInfo.ua || defaultUA, result.channels.map(channel => channel.tvgId).filter(tvgId => tvgId));

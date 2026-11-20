@@ -17,9 +17,7 @@ export async function POST(request: NextRequest) {
     const config = await getConfig();
     if (username !== process.env.USERNAME) {
       // 管理员
-      const user = config.UserConfig.Users.find(
-        (u) => u.username === username
-      );
+      const user = config.UserConfig.Users.find((u) => u.username === username);
       if (!user || user.role !== 'admin' || user.banned) {
         return NextResponse.json({ error: '权限不足' }, { status: 401 });
       }
@@ -41,7 +39,10 @@ export async function POST(request: NextRequest) {
       case 'add':
         // 检查是否已存在相同的 key
         if (config.LiveConfig.some((l) => l.key === key)) {
-          return NextResponse.json({ error: '直播源 key 已存在' }, { status: 400 });
+          return NextResponse.json(
+            { error: '直播源 key 已存在' },
+            { status: 400 }
+          );
         }
 
         const liveInfo = {
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest) {
           from: 'custom' as 'custom' | 'config',
           channelNumber: 0,
           disabled: false,
-        }
+        };
 
         try {
           const nums = await refreshLiveChannels(liveInfo);
@@ -76,7 +77,10 @@ export async function POST(request: NextRequest) {
 
         const liveSource = config.LiveConfig[deleteIndex];
         if (liveSource.from === 'config') {
-          return NextResponse.json({ error: '不能删除配置文件中的直播源' }, { status: 400 });
+          return NextResponse.json(
+            { error: '不能删除配置文件中的直播源' },
+            { status: 400 }
+          );
         }
 
         deleteCachedLiveChannels(key);
@@ -91,6 +95,10 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: '直播源不存在' }, { status: 404 });
         }
         enableSource.disabled = false;
+        enableSource.disabledBy = undefined;
+        enableSource.failCount = 0;
+        enableSource.successCount = 0;
+        enableSource.lastCheckError = undefined;
         break;
 
       case 'disable':
@@ -99,7 +107,11 @@ export async function POST(request: NextRequest) {
         if (!disableSource) {
           return NextResponse.json({ error: '直播源不存在' }, { status: 404 });
         }
+        // 人工停用要打上标记，定时健康检查不能把它自动恢复
         disableSource.disabled = true;
+        disableSource.disabledBy = 'manual';
+        disableSource.failCount = 0;
+        disableSource.successCount = 0;
         break;
 
       case 'edit':
@@ -111,7 +123,10 @@ export async function POST(request: NextRequest) {
 
         // 配置文件中的直播源不允许编辑
         if (editSource.from === 'config') {
-          return NextResponse.json({ error: '不能编辑配置文件中的直播源' }, { status: 400 });
+          return NextResponse.json(
+            { error: '不能编辑配置文件中的直播源' },
+            { status: 400 }
+          );
         }
 
         // 更新字段（除了 key 和 from）
@@ -119,6 +134,11 @@ export async function POST(request: NextRequest) {
         editSource.url = url as string;
         editSource.ua = ua || '';
         editSource.epg = epg || '';
+
+        // 地址可能已被修复，清空旧的检测计数，避免带着历史失败次数进入下一轮
+        editSource.failCount = 0;
+        editSource.successCount = 0;
+        editSource.lastCheckError = undefined;
 
         // 刷新频道数
         try {
@@ -134,7 +154,10 @@ export async function POST(request: NextRequest) {
         // 排序直播源
         const { order } = body;
         if (!Array.isArray(order)) {
-          return NextResponse.json({ error: '排序数据格式错误' }, { status: 400 });
+          return NextResponse.json(
+            { error: '排序数据格式错误' },
+            { status: 400 }
+          );
         }
 
         // 创建新的排序后的数组

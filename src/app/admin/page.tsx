@@ -277,6 +277,11 @@ interface DataSource {
   api: string;
   detail?: string;
   disabled?: boolean;
+  disabledBy?: 'auto' | 'manual';
+  failCount?: number;
+  successCount?: number;
+  lastCheckAt?: string;
+  lastCheckError?: string;
   from: 'config' | 'custom';
 }
 
@@ -289,8 +294,36 @@ interface LiveDataSource {
   epg?: string;
   channelNumber?: number;
   disabled?: boolean;
+  disabledBy?: 'auto' | 'manual';
+  failCount?: number;
+  successCount?: number;
+  lastCheckAt?: string;
+  lastCheckError?: string;
   from: 'config' | 'custom';
 }
+
+// 后台徽章提示：最近一次定时检测时间、连续失败次数与失败原因
+const getSourceHealthTitle = (item: {
+  lastCheckAt?: string;
+  lastCheckError?: string;
+  failCount?: number;
+}) => {
+  if (!item.lastCheckAt) {
+    return '尚未进行定时检测';
+  }
+  const parts = [
+    `最近检测 ${new Date(item.lastCheckAt).toLocaleString('zh-CN', {
+      hour12: false,
+    })}`,
+  ];
+  if (item.failCount) {
+    parts.push(`连续失败 ${item.failCount} 次`);
+  }
+  if (item.lastCheckError) {
+    parts.push(item.lastCheckError);
+  }
+  return parts.join(' · ');
+};
 
 // 自定义分类数据类型
 interface CustomCategory {
@@ -2372,12 +2405,20 @@ const VideoSourceConfig = ({
         </td>
         <td className='px-6 py-4 whitespace-nowrap max-w-[1rem]'>
           <span
-            className={`px-2 py-1 text-xs rounded-full ${!source.disabled
-              ? 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300'
-              : 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-300'
-              }`}
+            className={`px-2 py-1 text-xs rounded-full ${
+              !source.disabled
+                ? 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300'
+                : source.disabledBy === 'auto'
+                  ? 'bg-amber-100 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300'
+                  : 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-300'
+            }`}
+            title={getSourceHealthTitle(source)}
           >
-            {!source.disabled ? '启用中' : '已禁用'}
+            {!source.disabled
+              ? '启用中'
+              : source.disabledBy === 'auto'
+                ? '自动停用'
+                : '已禁用'}
           </span>
         </td>
         <td className='px-6 py-4 whitespace-nowrap max-w-[1rem]'>
@@ -4208,12 +4249,20 @@ const LiveSourceConfig = ({
         </td>
         <td className='px-6 py-4 whitespace-nowrap max-w-[1rem]'>
           <span
-            className={`px-2 py-1 text-xs rounded-full ${!liveSource.disabled
-              ? 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300'
-              : 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-300'
-              }`}
+            className={`px-2 py-1 text-xs rounded-full ${
+              !liveSource.disabled
+                ? 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300'
+                : liveSource.disabledBy === 'auto'
+                  ? 'bg-amber-100 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300'
+                  : 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-300'
+            }`}
+            title={getSourceHealthTitle(liveSource)}
           >
-            {!liveSource.disabled ? '启用中' : '已禁用'}
+            {!liveSource.disabled
+              ? '启用中'
+              : liveSource.disabledBy === 'auto'
+                ? '自动停用'
+                : '已禁用'}
           </span>
         </td>
         <td className='px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2'>
