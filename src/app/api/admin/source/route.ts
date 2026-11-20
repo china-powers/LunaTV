@@ -108,6 +108,7 @@ export async function POST(request: NextRequest) {
         entry.disabledBy = 'manual';
         entry.failCount = 0;
         entry.successCount = 0;
+        entry.lastCheckError = undefined;
         break;
       }
       case 'enable': {
@@ -170,6 +171,7 @@ export async function POST(request: NextRequest) {
             entry.disabledBy = 'manual';
             entry.failCount = 0;
             entry.successCount = 0;
+            entry.lastCheckError = undefined;
           }
         });
         break;

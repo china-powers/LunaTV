@@ -1,5 +1,6 @@
 import {
   applyHealthReport,
+  copyHealthState,
   HealthFields,
   ProbeFetch,
   probeVideoSource,
@@ -92,16 +93,59 @@ describe('健康状态机', () => {
 });
 
 describe('熔断保护', () => {
-  it('大面积同时失败时不落停用', () => {
-    expect(shouldSuppressDisabling(8, 10)).toBe(true);
+  it('全部探活失败时判定为我方网络问题，本轮不落库', () => {
+    expect(shouldSuppressDisabling(10, 10)).toBe(true);
+    expect(shouldSuppressDisabling(5, 5)).toBe(true);
   });
 
-  it('少数源失败时正常执行停用', () => {
-    expect(shouldSuppressDisabling(2, 10)).toBe(false);
+  it('只要有一个源能通就按真实结果停用，否则坏源永远停不掉', () => {
+    expect(shouldSuppressDisabling(8, 10)).toBe(false);
+    expect(shouldSuppressDisabling(4, 5)).toBe(false);
   });
 
   it('源太少时不熔断，否则小站永远停不掉坏源', () => {
     expect(shouldSuppressDisabling(3, 3)).toBe(false);
+  });
+});
+
+describe('健康状态合并', () => {
+  it('只把检测状态合并进最新配置，不覆盖源地址等配置', () => {
+    const target: HealthFields & { key: string; api: string } = {
+      key: 'a',
+      api: 'https://new.example/api.php',
+      disabled: false,
+    };
+
+    copyHealthState(target, {
+      disabled: true,
+      disabledBy: 'auto',
+      failCount: 2,
+      successCount: 0,
+      lastCheckAt: '2026-11-20T10:00:00.000Z',
+      lastCheckError: 'HTTP 500',
+    });
+
+    expect(target.disabled).toBe(true);
+    expect(target.disabledBy).toBe('auto');
+    expect(target.failCount).toBe(2);
+    expect(target.lastCheckError).toBe('HTTP 500');
+    expect(target.api).toBe('https://new.example/api.php');
+  });
+
+  it('来源没有的字段会清空目标，避免残留上一轮状态', () => {
+    const target: HealthFields = {
+      disabled: true,
+      disabledBy: 'auto',
+      failCount: 2,
+      lastCheckError: '旧错误',
+    };
+
+    copyHealthState(target, { disabled: false });
+
+    expect(target.disabled).toBe(false);
+    expect(target.disabledBy).toBeUndefined();
+    expect(target.failCount).toBeUndefined();
+    expect(target.lastCheckError).toBeUndefined();
   });
 });
 
@@ -157,6 +201,25 @@ describe('视频源探活', () => {
 
     expect(report.ok).toBe(false);
     expect(report).toHaveProperty('error', expect.stringContaining('JSON'));
+  });
+
+  it('读取响应体时超时报超时，而不是报 JSON 错误', async () => {
+    const abortError = Object.assign(new Error('aborted'), {
+      name: 'AbortError',
+    });
+    const report = await probeVideoSource('https://a.example/api.php', {
+      fetchImpl: async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => {
+            throw abortError;
+          },
+        } as unknown as Response),
+    });
+
+    expect(report.ok).toBe(false);
+    expect(report).toHaveProperty('error', expect.stringContaining('超时'));
   });
 
   it('网络异常不抛出，转成失败结果', async () => {

@@ -2,14 +2,17 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
+import { AdminConfig } from '@/lib/admin.types';
 import { API_CONFIG, getConfig, refineConfig } from '@/lib/config';
 import { db } from '@/lib/db';
 import { fetchVideoDetail } from '@/lib/fetchVideoDetail';
 import { refreshLiveChannels } from '@/lib/live';
 import {
   applyHealthReport,
+  copyHealthState,
   HealthFields,
   HealthReport,
+  isManuallyDisabled,
   probeVideoSource,
   shouldProbe,
   shouldSuppressDisabling,
@@ -31,7 +34,7 @@ const LIVE_FETCH_TIMEOUT_MS = 15 * 1000;
 
 // 一轮健康检查里单个源的检测结果（视频源没有频道数，用 null 占位）
 interface HealthCheckResult {
-  source: HealthFields & { channelNumber?: number };
+  source: HealthFields & { key: string; channelNumber?: number };
   channelNumber: number | null;
   report: HealthReport;
 }
@@ -196,7 +199,9 @@ async function refreshSourcesHealth() {
     applyHealthReport(result.source, result.report);
   });
 
-  await db.saveAdminConfig(config);
+  // 写回前重新取一次最新配置：探活可能持续数十秒，期间后台或其它实例可能改过
+  // 配置，直接拿旧快照整份覆盖会把对方的人工停用、换源等改动冲掉
+  await persistHealthState(videoResults, liveResults);
 
   const autoDisabled = results.filter(
     (result) => result.source.disabled && result.source.disabledBy === 'auto'
@@ -204,6 +209,52 @@ async function refreshSourcesHealth() {
   console.log(
     `[健康检查] 完成：检测 ${results.length} 个源，失败 ${failed} 个，当前自动停用 ${autoDisabled} 个`
   );
+}
+
+// 只把本轮检测到的健康状态合并进最新配置，避免覆盖并发写入的其它改动
+async function persistHealthState(
+  videoResults: HealthCheckResult[],
+  liveResults: HealthCheckResult[]
+) {
+  let latest: AdminConfig | null = null;
+  try {
+    latest = await db.getAdminConfig();
+  } catch (error) {
+    console.error('[健康检查] 读取最新配置失败，跳过写回:', error);
+    return;
+  }
+  if (!latest) {
+    return;
+  }
+
+  const checkedVideo = new Map(
+    videoResults.map((result) => [result.source.key, result.source])
+  );
+  const checkedLive = new Map(
+    liveResults.map((result) => [result.source.key, result.source])
+  );
+
+  (latest.SourceConfig || []).forEach((entry) => {
+    const checked = checkedVideo.get(entry.key);
+    // 探活期间被人工停用的源，以人工状态为准，不能被旧快照改回启用
+    if (!checked || isManuallyDisabled(entry)) {
+      return;
+    }
+    copyHealthState(entry, checked);
+  });
+
+  (latest.LiveConfig || []).forEach((entry) => {
+    const checked = checkedLive.get(entry.key);
+    if (!checked || isManuallyDisabled(entry)) {
+      return;
+    }
+    copyHealthState(entry, checked);
+    if (checked.channelNumber !== undefined) {
+      entry.channelNumber = checked.channelNumber;
+    }
+  });
+
+  await db.saveAdminConfig(latest);
 }
 
 async function refreshConfig() {

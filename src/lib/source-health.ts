@@ -5,7 +5,7 @@
  * - 连续 FAIL_THRESHOLD 次失败才停用，避免一次抖动就下线；
  * - 自动停用的源继续参与探活，连续 RECOVER_THRESHOLD 次成功才恢复；
  * - 手动停用的源不参与自动逻辑（老数据没有 disabledBy，一律按手动处理）；
- * - 大面积同时失败视为我方网络问题（熔断），调用方据此跳过本轮落库。
+ * - 全部源同时失败视为我方网络问题（熔断），调用方据此跳过本轮落库。
  *
  * 该模块不依赖项目内其它模块，方便单测。
  */
@@ -13,7 +13,6 @@
 export const FAIL_THRESHOLD = 2;
 export const RECOVER_THRESHOLD = 2;
 export const BREAKER_MIN_SOURCES = 5;
-export const BREAKER_FAILURE_RATIO = 0.8;
 
 export interface HealthFields {
   disabled?: boolean;
@@ -79,17 +78,30 @@ export function applyHealthReport(
 }
 
 /**
- * 熔断：一轮检测里源足够多、且几乎全部失败时，多半是我方网络/DNS 出问题，
- * 此时停用全部源只会让站点彻底空掉，交给调用方跳过本轮。
+ * 熔断：只有“一个源都没成功”时才敢断定是我方网络/DNS 问题，此时停用全部源
+ * 只会让站点彻底空掉，交给调用方跳过本轮。
+ *
+ * 不按失败率判断：长期坏源会随自身被停用把失败率顶到 80% 以上，结果是每轮
+ * 都熔断、坏源永远停不掉，健康检查彻底失效。
  */
 export function shouldSuppressDisabling(
   failed: number,
   total: number
 ): boolean {
-  if (total < BREAKER_MIN_SOURCES) {
-    return false;
-  }
-  return failed / total >= BREAKER_FAILURE_RATIO;
+  return total >= BREAKER_MIN_SOURCES && failed === total;
+}
+
+/** 把一轮检测得到的状态合并进最新配置，只动健康字段，不碰地址等配置 */
+export function copyHealthState(
+  target: HealthFields,
+  checked: HealthFields
+): void {
+  target.disabled = checked.disabled;
+  target.disabledBy = checked.disabledBy;
+  target.failCount = checked.failCount;
+  target.successCount = checked.successCount;
+  target.lastCheckAt = checked.lastCheckAt;
+  target.lastCheckError = checked.lastCheckError;
 }
 
 export type ProbeFetch = (
@@ -144,7 +156,11 @@ export async function probeVideoSource(
     let data: unknown;
     try {
       data = await response.json();
-    } catch {
+    } catch (error) {
+      // 超时可能发生在读 body 时，别把超时报成“不是合法 JSON”
+      if (error instanceof Error && error.name === 'AbortError') {
+        return { ok: false, error: `请求超时（${timeoutMs}ms）` };
+      }
       return { ok: false, error: '返回内容不是合法 JSON' };
     }
 

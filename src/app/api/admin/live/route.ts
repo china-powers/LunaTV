@@ -112,6 +112,7 @@ export async function POST(request: NextRequest) {
         disableSource.disabledBy = 'manual';
         disableSource.failCount = 0;
         disableSource.successCount = 0;
+        disableSource.lastCheckError = undefined;
         break;
 
       case 'edit':

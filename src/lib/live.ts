@@ -71,7 +71,6 @@ export async function refreshLiveChannels(
     ? setTimeout(() => controller.abort(), options.timeoutMs)
     : undefined;
 
-  let data: string;
   try {
     const response = await fetch(liveInfo.url, {
       headers: {
@@ -79,10 +78,28 @@ export async function refreshLiveChannels(
       },
       signal: controller?.signal,
     });
-    data = await response.text();
+    const data = await response.text();
+
+    const result = parseM3U(liveInfo.key, data);
+    const epgUrl = liveInfo.epg || result.tvgUrl;
+    // 节目单必须受同一个超时约束：EPG 服务器只回响应头、不再吐数据时，
+    // 没有 signal 的 fetch 会把整轮定时任务永久挂住
+    const epgs = await parseEpg(
+      epgUrl,
+      ua,
+      result.channels.map((channel) => channel.tvgId).filter((tvgId) => tvgId),
+      controller?.signal
+    );
+    cachedLiveChannels[liveInfo.key] = {
+      channelNumber: result.channels.length,
+      channels: result.channels,
+      epgUrl: epgUrl,
+      epgs: epgs,
+    };
+    return result.channels.length;
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error(`拉取 m3u 超时（${options.timeoutMs}ms）`);
+      throw new Error(`拉取直播源超时（${options.timeoutMs}ms）`);
     }
     throw error;
   } finally {
@@ -90,19 +107,14 @@ export async function refreshLiveChannels(
       clearTimeout(timer);
     }
   }
-  const result = parseM3U(liveInfo.key, data);
-  const epgUrl = liveInfo.epg || result.tvgUrl;
-  const epgs = await parseEpg(epgUrl, liveInfo.ua || defaultUA, result.channels.map(channel => channel.tvgId).filter(tvgId => tvgId));
-  cachedLiveChannels[liveInfo.key] = {
-    channelNumber: result.channels.length,
-    channels: result.channels,
-    epgUrl: epgUrl,
-    epgs: epgs,
-  };
-  return result.channels.length;
 }
 
-async function parseEpg(epgUrl: string, ua: string, tvgIds: string[]): Promise<{
+async function parseEpg(
+  epgUrl: string,
+  ua: string,
+  tvgIds: string[],
+  signal?: AbortSignal
+): Promise<{
   [key: string]: {
     start: string;
     end: string;
@@ -121,6 +133,7 @@ async function parseEpg(epgUrl: string, ua: string, tvgIds: string[]): Promise<{
       headers: {
         'User-Agent': ua,
       },
+      signal,
     });
     if (!response.ok) {
       return {};
