@@ -6,6 +6,7 @@ import { AlertCircle, CheckCircle } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 
+import { REPO_URL } from '@/lib/repo';
 import { CURRENT_VERSION } from '@/lib/version';
 import { checkForUpdates, UpdateStatus } from '@/lib/version_check';
 
@@ -34,20 +35,19 @@ function VersionDisplay() {
 
   return (
     <button
-      onClick={() =>
-        window.open('https://github.com/MoonTechLab/LunaTV', '_blank')
-      }
+      onClick={() => window.open(REPO_URL, '_blank')}
       className='absolute bottom-4 left-1/2 transform -translate-x-1/2 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 transition-colors cursor-pointer'
     >
       <span className='font-mono'>v{CURRENT_VERSION}</span>
       {!isChecking && updateStatus !== UpdateStatus.FETCH_FAILED && (
         <div
-          className={`flex items-center gap-1.5 ${updateStatus === UpdateStatus.HAS_UPDATE
-            ? 'text-yellow-600 dark:text-yellow-400'
-            : updateStatus === UpdateStatus.NO_UPDATE
+          className={`flex items-center gap-1.5 ${
+            updateStatus === UpdateStatus.HAS_UPDATE
+              ? 'text-yellow-600 dark:text-yellow-400'
+              : updateStatus === UpdateStatus.NO_UPDATE
               ? 'text-green-600 dark:text-green-400'
               : ''
-            }`}
+          }`}
         >
           {updateStatus === UpdateStatus.HAS_UPDATE && (
             <>
@@ -71,7 +71,11 @@ function VersionDisplay() {
 function sanitizeRedirect(target: string | null): string {
   if (!target) return '/';
   // 必须是以单个 / 开头的站内路径（排除 //evil.com 与 /\evil.com 这类协议相对地址）
-  if (!target.startsWith('/') || target.startsWith('//') || target.startsWith('/\\')) {
+  if (
+    !target.startsWith('/') ||
+    target.startsWith('//') ||
+    target.startsWith('/\\')
+  ) {
     return '/';
   }
   return target;
@@ -117,7 +121,9 @@ function LoginPageClient() {
         router.replace(sanitizeRedirect(searchParams.get('redirect')));
       } else {
         const data = await res.json().catch(() => ({}));
-        setError(data.error ?? (res.status === 401 ? '密码错误' : '服务器错误'));
+        setError(
+          data.error ?? (res.status === 401 ? '密码错误' : '服务器错误')
+        );
       }
     } catch (error) {
       setError('网络错误，请稍后重试');
@@ -125,8 +131,6 @@ function LoginPageClient() {
       setLoading(false);
     }
   };
-
-
 
   return (
     <div className='relative min-h-screen flex items-center justify-center px-4 overflow-hidden'>
@@ -177,9 +181,7 @@ function LoginPageClient() {
           {/* 登录按钮 */}
           <button
             type='submit'
-            disabled={
-              !password || loading || (shouldAskUsername && !username)
-            }
+            disabled={!password || loading || (shouldAskUsername && !username)}
             className='inline-flex w-full justify-center rounded-lg bg-green-600 py-3 text-base font-semibold text-white shadow-lg transition-all duration-200 hover:from-green-600 hover:to-blue-600 disabled:cursor-not-allowed disabled:opacity-50'
           >
             {loading ? '登录中...' : '登录'}

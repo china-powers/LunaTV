@@ -1,10 +1,12 @@
-# MoonTV
+# LunaTV
 
 <div align="center">
-  <img src="public/logo.png" alt="MoonTV Logo" width="120">
+  <img src="public/logo.png" alt="LunaTV Logo" width="120">
 </div>
 
-> 🎬 **MoonTV** 是一个开箱即用的、跨平台的影视聚合播放器。它基于 **Next.js 14** + **Tailwind&nbsp;CSS** + **TypeScript** 构建，支持多资源搜索、在线播放、收藏同步、播放记录、云端存储，让你可以随时随地畅享海量免费影视内容。
+> 🎬 **LunaTV** 是一个开箱即用的、跨平台的影视聚合播放器。它基于 **Next.js 14** + **Tailwind&nbsp;CSS** + **TypeScript** 构建，支持多资源搜索、在线播放、收藏同步、播放记录、云端存储，让你可以随时随地畅享海量免费影视内容。
+
+> 📌 本仓库是 [MoonTechLab/LunaTV](https://github.com/MoonTechLab/LunaTV) 的 Fork（[china-powers/LunaTV](https://github.com/china-powers/LunaTV)），保留上游署名，并以 CC BY-NC-SA 4.0 协议继续开源。
 
 <div align="center">
 
@@ -37,7 +39,7 @@
   <img src="public/screenshot3.png" alt="项目截图" style="max-width:600px">
 </details>
 
-### 请不要在 B站、小红书、微信公众号、抖音、今日头条或其他中国大陆社交平台发布视频或文章宣传本项目，不授权任何“科技周刊/月刊”类项目或站点收录本项目。
+### 请不要在 B 站、小红书、微信公众号、抖音、今日头条或其他中国大陆社交平台发布视频或文章宣传本项目，不授权任何“科技周刊/月刊”类项目或站点收录本项目。
 
 ## 🗺 目录
 
@@ -65,7 +67,7 @@
 | 语言      | TypeScript 4                                                                                          |
 | 播放器    | [ArtPlayer](https://github.com/zhw2590582/ArtPlayer) · [HLS.js](https://github.com/video-dev/hls.js/) |
 | 代码质量  | ESLint · Prettier · Jest                                                                              |
-| 部署      | Docker                                                                    |
+| 部署      | Docker                                                                                                |
 
 ## 部署
 
@@ -78,6 +80,7 @@
 [![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates/8MPTQU/deploy)
 
 **优势**：
+
 - ✅ 无需配置，一键启动（自动部署完整环境）
 - ✅ 自动 HTTPS 和全球 CDN 加速
 - ✅ 持久化存储，数据永不丢失
@@ -90,7 +93,7 @@
 ```yml
 services:
   moontv-core:
-    image: ghcr.io/moontechlab/lunatv:latest
+    image: ghcr.io/china-powers/lunatv:latest
     container_name: moontv-core
     restart: on-failure
     ports:
@@ -124,7 +127,7 @@ volumes:
 ```yml
 services:
   moontv-core:
-    image: ghcr.io/moontechlab/lunatv:latest
+    image: ghcr.io/china-powers/lunatv:latest
     container_name: moontv-core
     restart: on-failure
     ports:
@@ -157,10 +160,11 @@ networks:
 1. 在 [upstash](https://upstash.com/) 注册账号并新建一个 Redis 实例，名称任意。
 2. 复制新数据库的 **HTTPS ENDPOINT 和 TOKEN**
 3. 使用如下 docker compose
+
 ```yml
 services:
   moontv-core:
-    image: ghcr.io/moontechlab/lunatv:latest
+    image: ghcr.io/china-powers/lunatv:latest
     container_name: moontv-core
     restart: on-failure
     ports:
@@ -182,22 +186,24 @@ Zeabur 是一站式云端部署平台，使用预构建的 Docker 镜像可以�
 **部署步骤：**
 
 1. **添加 KVRocks 服务**（先添加数据库）
+
    - 点击 "Add Service" > "Docker Images"
    - 输入镜像名称：`apache/kvrocks`
    - 配置端口：`6666` (TCP)
    - **记住服务名称**（通常是 `apachekvrocks`）
    - **配置持久化卷（重要）**：
-     * 在服务设置中找到 "Volumes" 部分
-     * 点击 "Add Volume" 添加新卷
-     * Volume ID: `kvrocks-data`（可自定义，仅支持字母、数字、连字符）
-     * Path: `/var/lib/kvrocks/db`
-     * 保存配置
+     - 在服务设置中找到 "Volumes" 部分
+     - 点击 "Add Volume" 添加新卷
+     - Volume ID: `kvrocks-data`（可自定义，仅支持字母、数字、连字符）
+     - Path: `/var/lib/kvrocks/db`
+     - 保存配置
 
    > 💡 **重要提示**：持久化卷路径必须设置为 `/var/lib/kvrocks/db`（KVRocks 数据目录），这样配置文件保留在容器内，数据库文件持久化，重启后数据不会丢失！
 
 2. **添加 LunaTV 服务**
+
    - 点击 "Add Service" > "Docker Images"
-   - 输入镜像名称：`ghcr.io/moontechlab/lunatv:latest`
+   - 输入镜像名称：`ghcr.io/china-powers/lunatv:latest`
    - 配置端口：`3000` (HTTP)
 
 3. **配置环境变量**
@@ -224,6 +230,7 @@ Zeabur 是一站式云端部署平台，使用预构建的 Docker 镜像可以�
    ```
 
    **注意**：
+
    - 使用服务名称作为主机名：`redis://apachekvrocks:6666`
    - 如果服务名称不同，请替换为实际名称
    - 两个服务必须在同一个 Project 中
@@ -234,12 +241,12 @@ Zeabur 是一站式云端部署平台，使用预构建的 Docker 镜像可以�
 
 #### 5. 设置访问域名（必须）
 
-   - 在 LunaTV 服务页面，点击 "Networking" 或 "网络" 标签
-   - 点击 "Generate Domain" 生成 Zeabur 提供的免费域名（如 `xxx.zeabur.app`）
-   - 或者绑定自定义域名：
-     * 点击 "Add Domain" 添加你的域名
-     * 按照提示配置 DNS CNAME 记录指向 Zeabur 提供的目标地址
-   - 设置完域名后即可通过域名访问 LunaTV
+- 在 LunaTV 服务页面，点击 "Networking" 或 "网络" 标签
+- 点击 "Generate Domain" 生成 Zeabur 提供的免费域名（如 `xxx.zeabur.app`）
+- 或者绑定自定义域名：
+  - 点击 "Add Domain" 添加你的域名
+  - 按照提示配置 DNS CNAME 记录指向 Zeabur 提供的目标地址
+- 设置完域名后即可通过域名访问 LunaTV
 
 6. **绑定自定义域名（可选）**
    - 在服务设置中点击 "Domains"
@@ -253,6 +260,7 @@ Zeabur 是一站式云端部署平台，使用预构建的 Docker 镜像可以�
 **更新步骤：**
 
 1. **进入服务页面**
+
    - 点击需要更新的服务（LunaTV 或 KVRocks）
 
 2. **重启服务**
@@ -260,6 +268,7 @@ Zeabur 是一站式云端部署平台，使用预构建的 Docker 镜像可以�
    - Zeabur 会自动拉取最新的 `latest` 镜像并重新部署
 
 > 💡 **提示**：
+>
 > - 使用 `latest` 标签时，Restart 会自动拉取最新镜像
 > - 生产环境推荐使用固定版本标签（如 `v5.5.6`）避免意外更新
 
@@ -308,11 +317,11 @@ custom_category 支持的自定义分类已知如下：
 
 也可输入如 "哈利波特" 效果等同于豆瓣搜索
 
-MoonTV 支持标准的苹果 CMS V10 API 格式。
+LunaTV 支持标准的苹果 CMS V10 API 格式。
 
 ## 订阅
 
-将完整的配置文件 base58 编码后提供 http 服务即为订阅链接，可在 MoonTV 后台/Helios 中使用。
+将完整的配置文件 base58 编码后提供 http 服务即为订阅链接，可在 LunaTV 后台/Helios 中使用。
 
 ## 自动更新
 
@@ -334,25 +343,25 @@ dockge/komodo 等 docker compose UI 也有自动更新功能
 
 ## 环境变量
 
-| 变量                                | 说明                                         | 可选值                           | 默认值                                                                                                                     |
-| ----------------------------------- | -------------------------------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| USERNAME                            | 站长账号           | 任意字符串                       | 无默认，必填字段                                                                                                                     |
-| PASSWORD                            | 站长密码           | 任意字符串                       | 无默认，必填字段                                                                                                                     |
-| SITE_BASE                           | 站点 url              |       形如 https://example.com                  | 空                                                                                                                     |
-| NEXT_PUBLIC_SITE_NAME               | 站点名称                                     | 任意字符串                       | MoonTV                                                                                                                     |
-| ANNOUNCEMENT                        | 站点公告                                     | 任意字符串                       | 本网站仅提供影视信息搜索服务，所有内容均来自第三方网站。本站不存储任何视频资源，不对任何内容的准确性、合法性、完整性负责。 |
-| NEXT_PUBLIC_STORAGE_TYPE            | 播放记录/收藏的存储方式                      | redis、kvrocks、upstash | 无默认，必填字段                                                                                                               |
-| KVROCKS_URL                           | kvrocks 连接 url                               | 连接 url                         | 空                                                                                                                         |
-| REDIS_URL                           | redis 连接 url                               | 连接 url                         | 空                                                                                                                         |
-| UPSTASH_URL                         | upstash redis 连接 url                       | 连接 url                         | 空                                                                                                                         |
-| UPSTASH_TOKEN                       | upstash redis 连接 token                     | 连接 token                       | 空                                                                                                                         |
-| NEXT_PUBLIC_SEARCH_MAX_PAGE         | 搜索接口可拉取的最大页数                     | 1-50                             | 5                                                                                                                          |
-| NEXT_PUBLIC_DOUBAN_PROXY_TYPE       | 豆瓣数据源请求方式                           | 见下方                           | direct                                                                                                                     |
-| NEXT_PUBLIC_DOUBAN_PROXY            | 自定义豆瓣数据代理 URL                       | url prefix                       | (空)                                                                                                                       |
-| NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE | 豆瓣图片代理类型                             | 见下方                           | direct                                                                                                                     |
-| NEXT_PUBLIC_DOUBAN_IMAGE_PROXY      | 自定义豆瓣图片代理 URL                       | url prefix                       | (空)                                                                                                                       |
-| NEXT_PUBLIC_DISABLE_YELLOW_FILTER   | 关闭色情内容过滤                             | true/false                       | false                                                                                                                      |
-| NEXT_PUBLIC_FLUID_SEARCH | 是否开启搜索接口流式输出 | true/ false | true |
+| 变量                                | 说明                     | 可选值                   | 默认值                                                                                                                     |
+| ----------------------------------- | ------------------------ | ------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| USERNAME                            | 站长账号                 | 任意字符串               | 无默认，必填字段                                                                                                           |
+| PASSWORD                            | 站长密码                 | 任意字符串               | 无默认，必填字段                                                                                                           |
+| SITE_BASE                           | 站点 url                 | 形如 https://example.com | 空                                                                                                                         |
+| NEXT_PUBLIC_SITE_NAME               | 站点名称                 | 任意字符串               | LunaTV                                                                                                                     |
+| ANNOUNCEMENT                        | 站点公告                 | 任意字符串               | 本网站仅提供影视信息搜索服务，所有内容均来自第三方网站。本站不存储任何视频资源，不对任何内容的准确性、合法性、完整性负责。 |
+| NEXT_PUBLIC_STORAGE_TYPE            | 播放记录/收藏的存储方式  | redis、kvrocks、upstash  | 无默认，必填字段                                                                                                           |
+| KVROCKS_URL                         | kvrocks 连接 url         | 连接 url                 | 空                                                                                                                         |
+| REDIS_URL                           | redis 连接 url           | 连接 url                 | 空                                                                                                                         |
+| UPSTASH_URL                         | upstash redis 连接 url   | 连接 url                 | 空                                                                                                                         |
+| UPSTASH_TOKEN                       | upstash redis 连接 token | 连接 token               | 空                                                                                                                         |
+| NEXT_PUBLIC_SEARCH_MAX_PAGE         | 搜索接口可拉取的最大页数 | 1-50                     | 5                                                                                                                          |
+| NEXT_PUBLIC_DOUBAN_PROXY_TYPE       | 豆瓣数据源请求方式       | 见下方                   | direct                                                                                                                     |
+| NEXT_PUBLIC_DOUBAN_PROXY            | 自定义豆瓣数据代理 URL   | url prefix               | (空)                                                                                                                       |
+| NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE | 豆瓣图片代理类型         | 见下方                   | direct                                                                                                                     |
+| NEXT_PUBLIC_DOUBAN_IMAGE_PROXY      | 自定义豆瓣图片代理 URL   | url prefix               | (空)                                                                                                                       |
+| NEXT_PUBLIC_DISABLE_YELLOW_FILTER   | 关闭色情内容过滤         | true/false               | false                                                                                                                      |
+| NEXT_PUBLIC_FLUID_SEARCH            | 是否开启搜索接口流式输出 | true/ false              | true                                                                                                                       |
 
 NEXT_PUBLIC_DOUBAN_PROXY_TYPE 选项解释：
 
@@ -403,12 +412,13 @@ v100.0.0 以上版本可配合 [Selene](https://github.com/MoonTechLab/Selene) �
 
 ## License
 
-[CC BY-NC-SA 4.0](LICENSE) © 2025 MoonTV & Contributors
+[CC BY-NC-SA 4.0](LICENSE) © 2025 MoonTV & Contributors；本分支 Fork 自 [MoonTechLab/LunaTV](https://github.com/MoonTechLab/LunaTV)，署名与协议保持不变。
 
 本项目采用 [知识共享 署名-非商业性使用-相同方式共享 4.0 国际许可协议](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh)：禁止任何商业化行为；任何衍生项目必须保留本项目地址与版权署名，并以相同协议开源。
 
 ## 致谢
 
+- [MoonTechLab/LunaTV](https://github.com/MoonTechLab/LunaTV) — 上游项目，本仓库的 Fork 来源；上游署名与协议始终保留。
 - [ts-nextjs-tailwind-starter](https://github.com/theodorusclarence/ts-nextjs-tailwind-starter) — 项目最初基于该脚手架。
 - [LibreTV](https://github.com/LibreSpark/LibreTV) — 由此启发，站在巨人的肩膀上。
 - [ArtPlayer](https://github.com/zhw2590582/ArtPlayer) — 提供强大的网页视频播放器。
@@ -419,4 +429,4 @@ v100.0.0 以上版本可配合 [Selene](https://github.com/MoonTechLab/Selene) �
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=MoonTechLab/LunaTV&type=Date)](https://www.star-history.com/#MoonTechLab/LunaTV&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=china-powers/LunaTV&type=Date)](https://www.star-history.com/#china-powers/LunaTV&Date)
